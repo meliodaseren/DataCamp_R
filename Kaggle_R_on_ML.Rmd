@@ -13,8 +13,17 @@ output: html_notebook
 
 ***
 
-If the code not run, check package is installed.
-> install.packages()
+#### Titanic: Machine Learning from Disaster
+https://www.kaggle.com/c/titanic/data
+
+#### Install packages
+```{r}
+install.packages(rpart)
+install.packages(rattle)
+install.packages(rpart.plot)
+install.packages(RColorBrewer)
+install.packages(randomForest)
+```
 
 ## Raising anchor
 
@@ -51,6 +60,7 @@ table(train$Sex, train$Survived)
 
 # Two-way comparison: row-wise proportions
 prop.table(table(train$Sex, train$Survived), 1)
+# prop.table(table(train$Sex, train$Survived), 2)
 ```
 
 #### Does age play a role?
@@ -80,21 +90,26 @@ test_one$Survived = 0
 
 # Set Survived to 1 if Sex equals "female"
 test_one$Survived[test$Sex == "female"] <- 1
+
+str(test_one)
 ```
 
 ## From icebergs to trees
 ### Intro to decision trees
+Conceptually, the decision tree algorithm starts with all the data at the root node and scans all the variables for the best one to split on. Once a variable is chosen, you do the split and go down one level (or one node) and repeat. The final nodes at the bottom of the decision tree are known as terminal nodes, and the majority vote of the observations in that node determine how to predict for new observations that end up in that terminal node.
 ### Creating first decision tree
+Inside [rpart](https://www.rdocumentation.org/packages/rpart/versions/4.1-11), there is the ```rpart()``` function to build your first decision tree. The function takes multiple arguments:
+* ```formula```: specifying variable of interest, and the variables used for prediction (e.g. ```formula = Survived ~ Sex + Age```).
+* ```data```: The data set to build the decision tree (here ```train```).
+* ```method```: Type of prediction you want. We want to predict a categorical variable, so classification: ```method = "class"```.
 ```{r}
 # Load in the R package
 library(rpart)
 
-# Your train and test set are still loaded in
-str(train)
-str(test)
-
 # Build the decision tree
-my_tree_two <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked, data = train, method = "class")
+my_tree_two <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked,
+                     data = train,
+                     method = "class")
 
 # Visualize the decision tree using plot() and text()
 plot(my_tree_two)
@@ -111,7 +126,7 @@ fancyRpartPlot(my_tree_two)
 ```
 
 ### Interpreting your decision tree
-Based on your decision tree, variables "Sex", "Age", "Pclass", "SibSp", "Fare" play the most important role to determine whether or not a passenger will survive.
+Based on your decision tree, variables **"Sex"**, **"Age"**, **"Pclass"**, **"SibSp"**, **"Fare"** play the most important role to determine whether or not a passenger will survive.
 
 ### Predict and submit to Kaggle
 ```{r}
@@ -119,16 +134,14 @@ Based on your decision tree, variables "Sex", "Age", "Pclass", "SibSp", "Fare" p
 my_tree_two
 test
 
-
 # Make predictions on the test set
-# my_tree_two is the tree model you've just built
-# test is the data set to build the preditions for
-# type = "class" specifies that you want to classify observations.
+  # my_tree_two is the tree model you've just built
+  # test is the data set to build the preditions for
+  # type = "class" specifies that you want to classify observations
 my_prediction <- predict(my_tree_two, newdata = test, type = "class")
 
 
-# Convert predictions to a CSV file with exactly 418 entries
-# and 2 columns PassengerId and Survived
+# Convert predictions to a CSV file with exactly 418 entries and 2 columns PassengerId and Survived
 
 # Finish the data.frame() call
 my_solution <- data.frame(PassengerId = test$PassengerId, Survived = my_prediction)
@@ -142,12 +155,12 @@ write.csv(my_solution, file = "my_solution1.csv", row.names = FALSE)
 
 ### Overfitting, the iceberg of decision trees
 Maybe we can improve even more by making a more complex model? In rpart, the amount of detail is defined by two parameters:
-* ```{r}cp``` determines when the splitting up of the decision tree stops.
-* ```{r}minsplit``` determines the minimum amount of observations in a leaf of the tree.
+* ```cp``` determines when the splitting up of the decision tree stops.
+* ```minsplit``` determines the minimum amount of observations in a leaf of the tree.
 
-In the ```{r}super_model``` on the right, ```{r}cp = 0``` (no stopping of splits) and ```{r}minsplit = 2``` (smallest leaf possible). This will create the best model! Or not? Check out the resulting plot with:
+In the ```super_model``` on the right, ```cp = 0``` (no stopping of splits) and ```minsplit = 2``` (smallest leaf possible). This will create the best model! Or not? Check out the resulting plot with:
 
-```{r}fancyRpartPlot(super_model)```
+```fancyRpartPlot(super_model)```
 
 Looking complex, but using this model to make predictions won't give you a good score on Kaggle. Why? Because you created very specific rules based on the data in the training set. These very detailed rules are only relevant for the training set but cannot be generalized to unknown sets. You overfitted your tree. Always be aware of this danger!
 
@@ -156,16 +169,17 @@ Looking complex, but using this model to make predictions won't give you a good 
 
 # Change this command
 my_tree_three <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked,
-                       data = train, method = "class", control = rpart.control(minsplit = 50, cp = 0))
+                       data = train, method = "class",
+                       control = rpart.control(minsplit = 50, cp = 0))
 
 # Visualize my_tree_three
 fancyRpartPlot(my_tree_three)
 ```
 
 ### Re-engineering our Titanic data set
-While feature engineering is a discipline in itself, too broad to be covered here in detail, let's have have a look at a simple example and create a new predictive attribute: ```{r}family_size```.
+While feature engineering is a discipline in itself, too broad to be covered here in detail, let's have have a look at a simple example and create a new predictive attribute: ```family_size```.
 
-A valid assumption is that larger families need more time to get together on a sinking ship, and hence have less chance of surviving. Family size is determined by the variables ```{r}SibSp``` and ```{r}Parch```, which indicate the number of family members a certain passenger is traveling with. So when doing feature engineering, you add a new variable ```{r}family_size```, which is the sum of ```{r}SibSp``` and ```{r}Parch``` plus one (the observation itself), to the test and train set.
+A valid assumption is that larger families need more time to get together on a sinking ship, and hence have less chance of surviving. Family size is determined by the variables ```SibSp``` and ```Parch```, which indicate the number of family members a certain passenger is traveling with. So when doing feature engineering, you add a new variable ```family_size```, which is the sum of ```SibSp``` and ```Parch``` plus one (the observation itself), to the test and train set.
 
 ```{r}
 # train and test are available
@@ -179,7 +193,6 @@ my_tree_four <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Emb
 
 # Visualize your new decision tree
 fancyRpartPlot(my_tree_four)
-
 ```
 
 ### Passenger Title and survival rate
@@ -262,7 +275,7 @@ write.csv(my_solution, file = "my_solution3.csv", row.names = FALSE)
 ```
 
 ### Important variables
-Your Random Forest object ```{r}my_forest``` is still loaded in. Remember you set ```{r}importance = TRUE```? Now you can see what variables are important using
+Your Random Forest object ```my_forest``` is still loaded in. Remember you set ```importance = TRUE```? Now you can see what variables are important using
 ```{r}
 varImpPlot(my_forest)
 ```
